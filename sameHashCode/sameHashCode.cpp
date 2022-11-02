@@ -11,9 +11,11 @@
 #include <set>
 #include <array>
 #include  <map>
+#include <string>
 
 #define NB_ALPHA  26
-#define SIZE_HASH 4
+#define SIZE_HASH 3
+#define TIME_INTERVAL_BETWEEN_SHOW 1
 
 static char alphabeticsLetters[NB_ALPHA] = { 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o',
                              'p','q','r','s','t','u','v','w','x','y','z' };
@@ -90,24 +92,30 @@ int getIdFromString(const std::string& generatedStr)
 }
 
 void getHashCodeCollisionOptim(std::string& str1, std::string& str2,
-                                int firstId, int lastId, int initJ,
-                              std::future<void>& futureExitObj)
+    int firstId, int lastId, int initJ,
+    std::future<void>& futureExitObj,
+    int threadID)
 {
-  /**\brief detection of the collison of hash function
-  * \arg str1: first string element collision
-  *      str2: first string element collision
-  *      futureExitObj: object allowing to stop the thread
-  * \return  generated string
-  **/
+    /**\brief detection of the collison of hash function
+    * \arg str1: first string element collision
+    *      str2: first string element collision
+    *      futureExitObj: object allowing to stop the thread
+    * \return  generated string
+    **/
     std::hash<std::string> strHash;
     int k = initJ;
-    for (int i = firstId; i < lastId - 1 ; i++)
+    //Compute the total comparaison number to do
+    int  n = lastId - firstId;
+    int totalComparaison = static_cast<int>(n * (n - 1) * 0.5);
+    std::cout << "Thread " <<threadID<<" Starting collision detection search with " << totalComparaison <<" comparisons" <<std::endl;
+    int nbComparisonDone = 0;
+    for (int i = firstId; i < lastId - 1; i++)
     {
         str1 = getGenerateString(i);
-        for (int j = k; j< lastId; j++)
+        for (int j = k; j < lastId; j++)
         {
             str2 = getGenerateString(j);
-            if (strHash(str1) == strHash(str2) && str1!= str2) //You find a collision
+            if (strHash(str1) == strHash(str2) && str1 != str2) //You find a collision
                 return;
             if (futureExitObj.wait_for(std::chrono::milliseconds(1)) == std::future_status::ready) //Other threads find  all necessary collisions
             { // no collision found clear all result
@@ -116,35 +124,18 @@ void getHashCodeCollisionOptim(std::string& str1, std::string& str2,
                 return;
             }
         }
+
+        //compute the percentage of comparison already done
+        nbComparisonDone += lastId - k;
+        int pourcentDone = static_cast<int>((nbComparisonDone / static_cast<double>(totalComparaison)) * 100.);
         k = i + 1;
-        
+        std::string msg = " Thread  " + std::to_string(threadID) + " : Task Total comparison " + std::to_string(totalComparaison) + " Pourcent comparison done " + std::to_string(pourcentDone) + " %\n";
+        std::cout << msg;
     }
     // no collision found clear all result
     str1.clear();
     str2.clear();
-
 }
-
-/*int main()
-{
-    //for (int i = 0; i < 676; i++)
-    //Signal to exit all the active thread
-    std::promise<void> exitSignal;
-    std::future<void> futureExitObj = exitSignal.get_future();
-
-        std::string str1;
-        std::string str2;
-        //exitSignal.set_value();
-        getHashCodeCollisionOptim(str1, str2,
-            0, 18000, 1, futureExitObj);
-  
-    /*for (int i = 0; i < 709; i++)
-    {
-        std::string str2 = getGenerateString(i);
-        std::cout << str2 <<" "<<i<< std::endl;
-    }
-    int toto = 5;
-}*/
 
 struct ResultApp
 {
@@ -158,7 +149,8 @@ struct ResultApp
     ResultApp():stateExitSignal(nullptr),
                 idFirstEltStr(0),
                 idLastEltStr(0),
-                idInitCmpELt(0){}
+                idInitCmpELt(0),
+                threadID(0){}
     ~ResultApp()
     { 
         delete stateExitSignal;
@@ -168,6 +160,7 @@ struct ResultApp
     int idFirstEltStr;
     int idInitCmpELt;
     int idLastEltStr;
+    int threadID;
     std::promise<bool>* stateExitSignal;
 };
 
@@ -196,6 +189,8 @@ void instanciateThread(ResultApp& resultApp, ThreadApp & threadApp, std::future<
     * \element  resultApp: Data struct containing all variables about the collision detection result 
     *           threadApp: Data struct containing all variables necessary to the thread management.
     **/
+
+    std::cout << "Starting thread " << resultApp.threadID << std::endl;
     if (threadApp.futureStateExitObj)
         delete threadApp.futureStateExitObj;
     if (resultApp.stateExitSignal)
@@ -206,13 +201,12 @@ void instanciateThread(ResultApp& resultApp, ThreadApp & threadApp, std::future<
    threadApp.futureStateExitObj = new std::future<bool>();
    resultApp.stateExitSignal = new std::promise<bool>();
    *threadApp.futureStateExitObj = resultApp.stateExitSignal->get_future();
-
     threadApp.thread = new std::thread([&resultApp, &futureObj]()
         {
             resultApp.str1.clear();
             resultApp.str2.clear();
             getHashCodeCollisionOptim(resultApp.str1, resultApp.str2,
-                resultApp.idFirstEltStr, resultApp.idLastEltStr, resultApp.idInitCmpELt,futureObj);
+                resultApp.idFirstEltStr, resultApp.idLastEltStr, resultApp.idInitCmpELt,futureObj, resultApp.threadID);
             resultApp.stateExitSignal->set_value(true);
         });
 }
@@ -223,14 +217,13 @@ int main(int argc, char** argv)
 
     //get total number of logical core on the computer
     const auto processorCount = std::thread::hardware_concurrency();
-    if (processorCount == 0)
-        std::cout << " INFO: The application will be not multithreaded" << std::endl;
-
-    //one core dedicated to the main thread
-    auto processorCountAvailable = processorCount - 1;
-    if (processorCountAvailable < 1)
-        processorCountAvailable = 1;
-
+    unsigned int processorCountAvailable = 1;
+    if (processorCount != 0)
+    {
+        std::cout << "The application will be  multithread on " << processorCount << " threads" << std::endl;
+        processorCountAvailable = processorCount - 1;//one core dedicated to the main thread
+    }
+    
     std::vector<ThreadApp> threadsApp;
     std::vector<ResultApp> resultsApp;
     resultsApp.resize(processorCountAvailable);
@@ -255,6 +248,7 @@ int main(int argc, char** argv)
     for (unsigned int proc = 0; proc < processorCountAvailable; ++proc)
     {
         ResultApp& result = resultsApp[proc];
+        result.threadID = proc + 1;
         result.idFirstEltStr = idFirstEltStrNextThread;
         if (proc + 1 != processorCountAvailable)
             result.idLastEltStr = (proc + 1) * nbrCombinationPerThread;
@@ -269,22 +263,27 @@ int main(int argc, char** argv)
     std::map<size_t,std::pair<std::string,std::string>> collisionFound;
     std::hash<std::string> strHash;
     std::vector<std::array<std::string, 3>> collisionsThreeElt;
+    bool allThreadTerminatedTask = false;
     collisionsThreeElt.reserve(processorCountAvailable);
-    while (collisionsThreeElt.empty())
+    while (collisionsThreeElt.empty() && !allThreadTerminatedTask)
     {
+        allThreadTerminatedTask = true;
         for (unsigned int proc = 0; proc < processorCountAvailable; ++proc)
         {
             ThreadApp& thread = threadsApp[proc];
-            auto duration = std::chrono::milliseconds(0);
-            auto status = thread.futureStateExitObj->wait_for(duration); 
-            if (status == std::future_status::ready //check if thread has finished their task
-                && thread.thread->joinable())
+            if (!thread.thread->joinable())
+                continue;
+
+            allThreadTerminatedTask = false; // a thread is not terminated
+            if (thread.futureStateExitObj->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) //check if this thread has finished has task
             {
                 ResultApp& result = resultsApp[proc];
-                thread.thread->join(); //stop thread 
+                thread.thread->join(); //stop thread
+                std::cout << "Stop thread " << result.threadID << std::endl;
                 if (result.str1.empty()) // if not collision has been found and the thread task is finished continue to next thread.
                     continue;
 
+                std::cout << " Collision found by the thread " << result.threadID << std::endl;
                 size_t hashCode = strHash(result.str1);
                 auto it = collisionFound.find(hashCode);
                 if (it == collisionFound.end()) //If new collision found keep it in map with hash code as key
@@ -317,6 +316,7 @@ int main(int argc, char** argv)
                 if (i != result.idLastEltStr - 2
                     || j != result.idLastEltStr - 1)
                 {
+                    std::cout << "reStarting thread " << result.threadID << std::endl;
                     result.idFirstEltStr = i;
                     result.idInitCmpELt = j + 1;
                     instanciateThread(result, thread, futureExitObj);
@@ -340,10 +340,7 @@ int main(int argc, char** argv)
 
     std::cout << "The 3 same collisions founded are : " << std::endl;
     for (auto arr : collisionsThreeElt)
-    {
         std::cout << "str1 : " << arr.at(0) << " str2 : " << arr.at(1) << " str3 " << arr.at(2) << " Hash code " << strHash(arr.at(0)) << std::endl;
-        std::cout << " Hash code str1 : " << strHash(arr.at(0)) << " Hash code str2 : " << strHash(arr.at(1)) << " Hash code str2 : " << strHash(arr.at(2)) << std::endl;
-    }
 
     std::cout << "The collision detection took  : " <<diff.count()<<" seconds "<<std::endl;
 }
