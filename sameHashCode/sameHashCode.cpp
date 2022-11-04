@@ -77,49 +77,6 @@ int getIdFromString(const std::string& generatedStr)
     return id;
 }
 
-/*void getHashCodeCollisionOptim(std::string& str1, std::string& str2,
-    int firstId, int lastId, int initJ,
-    std::future<void>& futureExitObj,
-    int threadID)
-{
-    
-    std::hash<std::string> strHash;
-    int k = initJ;
-    //Compute the total comparaison number to do
-    int  n = lastId - firstId;
-    int totalComparaison = static_cast<int>(n * (n - 1) * 0.5);
-    std::cout << "Thread " <<threadID<<" Starting collision detection search with " << totalComparaison <<" comparisons" <<std::endl;
-    int nbComparisonDone = 0;
-    for (int i = firstId; i < lastId - 1; i++)
-    {
-        str1 = getGenerateString(i);
-        for (int j = i+1; j < lastId; j++)
-        {
-            str2 = getGenerateString(j);
-            size_t hash = strHash(str2);
-            if (strHash(str1) == hash) //You find a collision
-                return;
-            //if (futureExitObj.wait_for(std::chrono::milliseconds(1)) == std::future_status::ready) //Other threads find  all necessary collisions
-            { // no collision found clear all result
-                str1.clear();
-                str2.clear();
-                return;
-            }
-        }
-
-        //compute the percentage of comparison already done
-        nbComparisonDone += lastId - k;
-        int pourcentDone = static_cast<int>((nbComparisonDone / static_cast<double>(totalComparaison)) * 100.);
-        k = i + 1;
-        std::string msg = " Thread  " + std::to_string(threadID) + " : Task Total comparison " + std::to_string(totalComparaison) + " Pourcent comparison done " + std::to_string(pourcentDone) + " %\n";
-        std::cout << msg;
-    }
-    // no collision found clear all result
-    str1.clear();
-    str2.clear();
-}*/
-
-
 
 void getHashCodeCollision(std::string& str1, std::string& str2,
     int firstId, int lastId, std::future<void>& futureExitObj,
