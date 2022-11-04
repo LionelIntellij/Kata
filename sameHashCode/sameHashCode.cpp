@@ -78,7 +78,7 @@ int getIdFromString(const std::string& generatedStr)
 }
 
 
-void getHashCodeCollision(std::string& str1, std::string& str2,
+void getHashCodeCollision(std::string& str1, std::string& str2, std::string& str3,
     int firstId, int lastId, std::future<void>& futureExitObj,
     int threadID)
 {
@@ -90,11 +90,13 @@ void getHashCodeCollision(std::string& str1, std::string& str2,
     * \return  generated string
     **/
     
+    
     std::map<size_t, int> buf;
     int size =lastId - firstId;
     std::string msg = "Thread " + std::to_string(threadID) + " Starting collision detection search with " + std::to_string(size) + " to test \n";
     std::cout << msg;
     std::hash<std::string> strHash;
+    std::map<size_t, std::pair<std::string, std::string>> collisionFound;
     for (int i = firstId; i < lastId; ++i)
     {
         str1 = getGenerateString(i);
@@ -104,13 +106,24 @@ void getHashCodeCollision(std::string& str1, std::string& str2,
             buf.insert(std::pair<size_t, int>(hash, i));
         else
         {
+            auto itFound = collisionFound.find(hash);
             str2 = getGenerateString(it->second);
-            break;
+            if (itFound == collisionFound.end()) //If new collision found keep it in map with hash code as key
+            {
+                std::pair<std::string, std::string> collision(str1, str2);
+                collisionFound.insert(std::pair<size_t, std::pair<std::string, std::string>>(hash, collision));
+            }
+            else //if collision found and already exist, check if the string are the same
+            {
+                str3 = itFound->second.second;
+                break;
+            }
         } 
         if (futureExitObj.wait_for(std::chrono::milliseconds(1)) == std::future_status::ready) //Other threads find  all necessary collisions
             break;
     }
     str1.clear();
+    str2.clear();
       
 }
 
@@ -134,6 +147,7 @@ struct ResultApp
     }
     std::string str1;
     std::string str2;
+    std::string str3;
     int idFirstEltStr;
     int idLastEltStr;
     int threadID;
@@ -181,7 +195,7 @@ void instanciateThread(ResultApp& resultApp, ThreadApp & threadApp, std::future<
         {
             resultApp.str1.clear();
             resultApp.str2.clear();
-            getHashCodeCollision(resultApp.str1, resultApp.str2,
+            getHashCodeCollision(resultApp.str1, resultApp.str2, resultApp.str3,
                 resultApp.idFirstEltStr, resultApp.idLastEltStr,futureObj, resultApp.threadID);
             resultApp.stateExitSignal->set_value(true);
         });
@@ -234,12 +248,11 @@ int main(int argc, char** argv)
     }
 
     //thread management
-    std::map<size_t,std::pair<std::string,std::string>> collisionFound;
-    std::hash<std::string> strHash;
-    std::vector<std::array<std::string, 3>> collisionsThreeElt;
-    collisionsThreeElt.reserve(processorCountAvailable);
+   
     bool allThreadTerminatedTask = false;
-    while (collisionsThreeElt.empty()  && !allThreadTerminatedTask)
+    bool isCollisionFound = false;
+    std::array<std::string, 3> collisions;
+    while (!isCollisionFound && !allThreadTerminatedTask)
     {
         allThreadTerminatedTask = true;
         for (unsigned int proc = 0; proc < processorCountAvailable; ++proc)
@@ -252,38 +265,17 @@ int main(int argc, char** argv)
             {
                 ResultApp& result = resultsApp[proc];
                 thread.thread->join(); //stop thread
-                std::cout << "Stop thread " << result.threadID << std::endl;
-                if (result.str1.empty()) // if not collision has been found and the thread task is finished continue to next thread.
-                    continue;
-
-                std::cout << " Collision found by the thread " << result.threadID << std::endl;
-                size_t hashCode = strHash(result.str1);
-                auto it = collisionFound.find(hashCode);
-                if (it == collisionFound.end()) //If new collision found keep it in map with hash code as key
+                std::cout << " Thread " << result.threadID <<"Stopped" << std::endl;
+                if (!result.str1.empty()) // if not collision has been found and the thread task is finished continue to next thread.
                 {
-                    std::pair<std::string, std::string> collision(result.str1, result.str2);
-                    collisionFound.insert(std::pair<size_t, std::pair<std::string, std::string>>(hashCode, collision));
-                }
-                else //if collision found and already exist, check if the string are the same
-                {
-                    if (result.str1 != it->second.second
-                        && result.str1 != it->second.first)
-                    {
-                        std::array<std::string, 3> collisionThreeElt = { result.str1,it->second.second ,it->second.first };
-                        collisionsThreeElt.push_back(collisionThreeElt);
-                    }
-                    
-                    if (result.str2 != it->second.second
-                        && result.str2 != it->second.first)
-                    {
-                        std::array<std::string, 3> collisionThreeElt = { result.str2,it->second.second ,it->second.first };
-                        collisionsThreeElt.push_back(collisionThreeElt);
-                    }
+                    collisions =  { result.str1, result.str2,result.str3 };
+                    isCollisionFound = true;
                 }
             }
         }
     }
 
+   
     //Release all threads. All necessary collisions are found. 
     exitSignal.set_value(); //Set the value
     for (ThreadApp& thread : threadsApp)
@@ -292,14 +284,17 @@ int main(int argc, char** argv)
 
     //Stop clock and show result
     std::chrono::duration<double> diff = std::chrono::system_clock::now() - start;
-    std::cout << "The collisions founded are : " << std::endl;
-    for (const auto& collision : collisionFound)
-        std::cout <<"str1 : "<<collision.second.first << " str2 : " << collision.second.second<< " Hash code " << collision.first << std::endl;
-    std::cout << std::endl;
+    std::hash<std::string> strHash;
+    if (isCollisionFound)
+    {
+        std::cout << "The 3 same collisions founded are : " << std::endl;
+        std::cout << "str1 : " << collisions.at(0) << " str2 : " << collisions.at(1) << " str3 " << collisions.at(2) << " Hash code " << strHash(collisions.at(0)) << std::endl;
 
-    std::cout << "The 3 same collisions founded are : " << std::endl;
-    for (auto arr : collisionsThreeElt)
-        std::cout << "str1 : " << arr.at(0) << " str2 : " << arr.at(1) << " str3 " << arr.at(2) << " Hash code " << strHash(arr.at(0)) << std::endl;
-
-    std::cout << "The collision detection took  : " <<diff.count()<<" seconds "<<std::endl;
+        std::cout << "The collision detection took  : " << diff.count() << " seconds " << std::endl;
+    }
+    else
+    {
+        std::cout << "No collisions found " << std::endl;
+    }
+    return 0;
 }
