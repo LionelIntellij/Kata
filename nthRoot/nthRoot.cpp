@@ -6,20 +6,20 @@
 
 
 
-int GetNthRoot(double number, int n)
+double GetNthRoot(double number, int n)
 {
   /**\brief get the nth root
    * \arg number: the final value
    *       n: the exposant
    * \return  the nth root number
    **/
-	int iNumber = static_cast<int>(number);
+
 	//particular case
-	if (iNumber == 1 )
+	if (number == 1 )
 		return 1;
 
 	//particular case
-	if (iNumber == 0)
+	if (number == 0)
 		return 0;
 
 	/**  Newton method x_k+1 = x_k - f(x_k)/fprime(x_k)
@@ -30,12 +30,12 @@ int GetNthRoot(double number, int n)
 		 ===> x_k+1 = ((n-1) x_k+ number/ x_k^(n-1))/n
 		 we note x_k+1 = x_k and x_k = x_kprev
 	**/
-	int x_kprev = iNumber + 1;
-	for (int x_k = iNumber; x_k < x_kprev;)
+	double x_kprev = number + 1;
+	for (double x_k = number; x_k < x_kprev;)
 	{
-		x_k = (x_k + (n - 1) * x_kprev)/n;
+		x_k = (x_k + (static_cast<double>(n) - 1) * x_kprev)/n;
 		x_kprev = x_k;
-		x_k = iNumber;
+		x_k = number;
 		for (int c = n - 1; c > 0; --c)
 			x_k /= x_kprev;
 	}
@@ -52,7 +52,8 @@ int main(int argc, char*argv[])
 {
 	double number = 0;
 	int  n = 0;
-
+	bool hasArgNumber = false;
+	bool hasArgExposant = false;
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string arg = argv[i];
@@ -68,6 +69,7 @@ int main(int argc, char*argv[])
 				try
 				{
 					n = std::stoi(argv[++i]);
+					hasArgExposant = true;
 				}
 				catch (std::exception& e)
 				{
@@ -90,6 +92,7 @@ int main(int argc, char*argv[])
 				try
 				{
 					number = std::stold(argv[++i]);
+					hasArgNumber = true;
 				}
 				catch (std::exception& e)
 				{
@@ -106,6 +109,15 @@ int main(int argc, char*argv[])
 			}
 		}
 	}
+	if (!hasArgNumber || !hasArgExposant)
+	{
+		if(!hasArgNumber)
+			std::cerr << "Error : Missing number argument" << std::endl;
+		if(!hasArgExposant)
+			std::cerr << "Error : Missing exposant argument" << std::endl;
+		show_usage(argv[0]);
+		return 1;
+	}
 	if (n < 0)
 	{
 		std::cerr << "Error : The entered exposant must be positive " << std::endl;
@@ -121,7 +133,7 @@ int main(int argc, char*argv[])
 		show_usage(argv[0]);
 		return 1;
 	}
-	int nthRoot = GetNthRoot(number, n);
+	double nthRoot = GetNthRoot(number, n);
 	std::cout <<"Info: Your Result : " << nthRoot << std::endl;
 	return 0;
 }
