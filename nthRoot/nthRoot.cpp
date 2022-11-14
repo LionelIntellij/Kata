@@ -3,7 +3,7 @@
 #if _WIN32
 	#define EXE ".exe"
 #endif
-
+#define PRECISION 1e-4
 
 
 double GetNthRoot(double number, int n)
@@ -31,7 +31,8 @@ double GetNthRoot(double number, int n)
 		 we note x_k+1 = x_k and x_k = x_kprev
 	**/
 	double x_kprev = number + 1;
-	for (double x_k = number; x_k < x_kprev;)
+
+	for (double x_k = number; std::abs(x_k - x_kprev) > PRECISION;)
 	{
 		x_k = (x_k + (static_cast<double>(n) - 1) * x_kprev)/n;
 		x_kprev = x_k;
@@ -134,7 +135,7 @@ int main(int argc, char*argv[])
 		return 1;
 	}
 	double nthRoot = GetNthRoot(number, n);
-	std::cout <<"Info: Your Result : " << nthRoot << std::endl;
+	std::cout <<"Info: Your Result : " << nthRoot << " with tolerance precision "<< PRECISION <<std::endl;
 	return 0;
 }
 
